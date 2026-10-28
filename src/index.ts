@@ -56,6 +56,13 @@ async function main() {
   const server = http.createServer(app);
   const io = attachRealtime(server);
   server.listen(config.PORT, () => log.info({ port: config.PORT }, 'Expenso API listening'));
+  // Report the database at start-up so the console shows whether PostgreSQL is reachable.
+  try {
+    const { rows } = await pool.query<{ db: string }>('SELECT current_database() AS db');
+    log.info({ database: rows[0].db }, 'Database connected');
+  } catch (err) {
+    log.error({ err }, 'Database connection failed');
+  }
   if (config.RUN_JOBS) {
     startScheduler(config.JOB_INTERVAL_SECONDS);
     await startExportWorker();

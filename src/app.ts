@@ -7,6 +7,7 @@ import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
 import { config } from './config.js';
+import { pool } from './db/client.js';
 import { errorHandler } from './lib/http.js';
 import { adminRouter } from './routes/admin.js';
 import { authRouter } from './routes/auth.js';
@@ -56,6 +57,16 @@ export function createApp() {
   app.use(cors({ origin: config.WEB_ORIGIN.split(',').map(s => s.trim()), credentials: true, exposedHeaders: ['Content-Disposition'] }));
   app.use(compression());
   app.get('/api/v1/health', (_req, res) => { res.json({ ok: true, time: new Date().toISOString(), version: '0.1.0' }); });
+  // Confirms PostgreSQL answers too; 503 when it doesn't, so a host's health check can tell the two apart.
+  app.get('/api/v1/health/db', async (_req, res) => {
+    const started = Date.now();
+    try {
+      await pool.query('SELECT 1');
+      res.json({ ok: true, database: 'up', latencyMs: Date.now() - started, time: new Date().toISOString() });
+    } catch (err) {
+      res.status(503).json({ ok: false, database: 'down', error: err instanceof Error ? err.message : String(err), time: new Date().toISOString() });
+    }
+  });
   const api = express.Router();
   api.use((req, res, next) => (req.method === 'PUT' && /\/attachments\/[^/]+\/content$/.test(req.path) ? next() : express.json({ limit: '1mb' })(req, res, next)));
   api.use(authRouter);
